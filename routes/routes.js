@@ -1,29 +1,39 @@
 const fs = require("fs");
 const path = require("path");
+const { readDb, writeDb } = require("../utils/databaseaccess");
+const { v4: uuidv4 } = require("uuid");
 
 module.exports = (app) => {
   // Setup notes variable
   fs.readFile("db/db.json", "utf8", (err, data) => {
     if (err) throw err;
 
-    var notes = JSON.parse(data);
+    // var notes = JSON.parse(data);
 
     // API ROUTES
     // ========================================================
 
     // Setup the /api/notes get route
-    app.get("/api/notes", function (req, res) {
+    app.get("/api/notes", async function (req, res) {
+      const notes = await readDb();
       // Read the db.json file and return all saved notes as JSON.
       res.json(notes);
     });
 
     // Setup the /api/notes post route
-    app.post("/api/notes", function (req, res) {
+    app.post("/api/notes", async function (req, res) {
       // Receives a new note, adds it to db.json, then returns the new note
-      let newNote = req.body;
-      notes.push(newNote);
-      updateDb();
-      return console.log("Added new note: " + newNote.title);
+      try {
+        const notes = await readDb();
+        let newNote = req.body;
+        newNote.id = uuidv4();
+        notes.push(newNote);
+        console.log("Added new note: " + newNote.title);
+        await writeDb(notes);
+        res.sendStatus(201);
+      } catch (error) {
+        res.sendStatus(500);
+      }
     });
 
     // Retrieves a note with specific id
@@ -33,10 +43,17 @@ module.exports = (app) => {
     });
 
     // Deletes a note with specific id
-    app.delete("/api/notes/:id", function (req, res) {
-      notes.splice(req.params.id, 1);
-      updateDb();
-      console.log("Deleted note with id " + req.params.id);
+    app.delete("/api/notes/:id", async function (req, res) {
+      try {
+        const notes = await readDb();
+        const i = notes.findIndex((note) => note.id === req.params.id);
+        notes.splice(i, 1);
+        console.log("Deleted note with id " + req.params.id);
+        await writeDb(notes);
+        res.sendStatus(200);
+      } catch (error) {
+        res.sendStatus(500);
+      }
     });
 
     // VIEW ROUTES
@@ -51,13 +68,5 @@ module.exports = (app) => {
     app.get("*", function (req, res) {
       res.sendFile(path.join(__dirname, "../public/index.html"));
     });
-
-    //updates the json file whenever a note is added or deleted
-    function updateDb() {
-      fs.writeFile("db/db.json", JSON.stringify(notes, "\t"), (err) => {
-        if (err) throw err;
-        return true;
-      });
-    }
   });
 };
